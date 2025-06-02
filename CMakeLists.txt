@@ -14,6 +14,7 @@ include_directories(include)
 
 add_executable(engine src/main.cpp
   src/ir.cpp
+  src/arm64.cpp
 )
 
 target_link_libraries(engine

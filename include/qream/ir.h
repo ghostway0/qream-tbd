@@ -1,3 +1,5 @@
+#pragma once
+
 #include <array>
 #include <cstddef>
 #include <optional>
@@ -80,11 +82,11 @@ enum class IROp {
   Fence,
   AtomicAdd,
   AtomicCmpXchg,
-  VShuffle,      // permute elements
-  VBlend,        // masked merge
-  VExtract,      // extract lane
-  VInsert,       // insert lane
-  VReduceAdd,    // horizontal reduction
+  VShuffle,   // permute elements
+  VBlend,     // masked merge
+  VExtract,   // extract lane
+  VInsert,    // insert lane
+  VReduceAdd, // horizontal reduction
 };
 
 struct Operation {

@@ -1,4 +1,3 @@
-#include <cstdint>
 #include <ostream>
 
 #include "qream/ir.h"
