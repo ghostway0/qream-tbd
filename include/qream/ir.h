@@ -4,18 +4,9 @@
 #include <cstddef>
 #include <optional>
 #include <ostream>
+#include <variant>
 
 using Address = uint64_t;
-
-enum class AccessType { R, W, X };
-
-enum class Space {
-  Register,
-  IO,
-  Memory,
-  Immediate,
-  Special, // addr=0 is for IP, addr=1 is for SP
-};
 
 enum class ScalarDType : uint8_t {
   Int8,
@@ -27,6 +18,13 @@ enum class ScalarDType : uint8_t {
   Float64,
 };
 
+enum class Space {
+  Registers,
+  Memory,
+  Immediate,
+  Special,
+};
+
 enum class VectorShape : uint8_t {
   Scalar = 1,
   V2 = 2,
@@ -35,16 +33,27 @@ enum class VectorShape : uint8_t {
   V16 = 16,
 };
 
-struct Access {
-  AccessType type;
-  Space space;
-  Address where;
+using SizeClass = uint8_t;
 
-  template <typename H>
-  friend H AbslHashValue(H h, const Access &c) {
-    return H::combine(std::move(h), c.type, c.space, c.where);
-  }
+struct Register {
+  uint8_t enc;
+  SizeClass size_class;
 };
+
+struct MemoryAddressing {
+  std::optional<Register> base_reg;
+  std::optional<Register> index;
+  uint64_t offset;
+};
+
+enum class Standard {
+  PC,
+  SP,
+};
+
+using Imm64 = uint64_t;
+
+using Access = std::variant<MemoryAddressing, Register, Imm64, Standard>;
 
 // bool operator==(const Access &a, const Access &b);
 
@@ -97,6 +106,8 @@ struct Operation {
   std::array<Access, 3> operands;
   size_t num_operands;
   std::optional<Access> predicate;
+
+  std::string toString() const;
 };
 
 std::ostream &operator<<(std::ostream &os, const ScalarDType &dtype);

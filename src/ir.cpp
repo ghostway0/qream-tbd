@@ -1,4 +1,5 @@
 #include <ostream>
+#include <sstream>
 
 #include "qream/ir.h"
 
@@ -55,29 +56,47 @@ std::ostream &operator<<(std::ostream &os, const ScalarDType &dtype) {
 
 std::ostream &operator<<(std::ostream &os, const Access &access) {
   std::ios::fmtflags orig_flags = os.flags();
-  switch (access.space) {
-    case Space::Register:
-      os << "r" << access.where;
-      break;
-    case Space::Memory:
-    case Space::Immediate:
-      os << "0x" << std::hex << access.where;
-      break;
-    case Space::IO:
-      os << "io" << access.where;
-      break;
-    case Space::Special:
-      if (access.where == 0) {
-        os << "ip";
-      } else if (access.where == 1) {
-        os << "sp";
-      } else {
-        os << "s" << access.where;
-      }
-      break;
-    default:
-      os << "unknown" << access.where;
-  }
+
+  std::visit(
+      [&](auto &&arg) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, Register>) {
+          os << "r" << static_cast<int>(arg.enc);
+        } else if constexpr (std::is_same_v<T, uint64_t>) {
+          os << "0x" << std::hex << arg;
+        } else if constexpr (std::is_same_v<T, MemoryAddressing>) {
+          os << "[";
+          bool need_plus = false;
+          if (arg.base_reg) {
+            os << "r" << static_cast<int>(arg.base_reg->enc);
+            need_plus = true;
+          }
+          if (arg.index) {
+            if (need_plus) os << " + ";
+            os << "r" << static_cast<int>(arg.index->enc);
+            need_plus = true;
+          }
+          if (arg.offset != 0 || !arg.base_reg.has_value()) {
+            if (need_plus) os << " + ";
+            os << "0x" << std::hex << arg.offset;
+          }
+          os << "]";
+        } else if constexpr (std::is_same_v<T, Standard>) {
+          switch (arg) {
+            case Standard::PC:
+              os << "pc";
+              break;
+            case Standard::SP:
+              os << "sp";
+              break;
+            default:
+              os << "⸮" << static_cast<uint64_t>(arg) << "?";
+              break;
+          }
+        }
+      },
+      access);
+
   os.flags(orig_flags);
   return os;
 }
@@ -200,4 +219,10 @@ std::ostream &operator<<(std::ostream &os, const IROp &op) {
       break;
   }
   return os;
+}
+
+std::string Operation::toString() const {
+  std::ostringstream oss;
+  oss << *this;
+  return oss.str();
 }

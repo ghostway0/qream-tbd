@@ -1,25 +1,56 @@
+#pragma once
+
+#include <absl/status/status.h>
+
 #include "qream/ir.h"
 
 using enum IROp;
 using enum ScalarDType;
 using enum VectorShape;
-using enum Space;
 
-#define MATCH_OP2(DTYPE_, SHAPE_, S0_, S1_, LAMBDA_)                      \
-  if (op.dtype == DTYPE_ && op.shape == SHAPE_ && op.num_operands >= 2 && \
-      op.operands[0].space == S0_ && op.operands[1].space == S1_) {       \
-    LAMBDA_(op, out);                                                     \
-    break;                                                                \
+template <typename... OperandTypes>
+struct extract_operands {
+  template <typename Handler, typename OutputIt>
+  static bool try_match(const Operation &op, Handler &&handler,
+                        OutputIt &out) {
+    static_assert(sizeof...(OperandTypes) <= 3, "Max 3 operands supported");
+
+    if (op.num_operands < sizeof...(OperandTypes)) {
+      return false;
+    }
+
+    return try_extract(op, std::forward<Handler>(handler), out,
+                       std::make_index_sequence<sizeof...(OperandTypes)>{});
   }
 
-#define MATCH_OP3(DTYPE_, SHAPE_, S0_, S1_, S2_, LAMBDA_)                 \
-  if (op.dtype == DTYPE_ && op.shape == SHAPE_ && op.num_operands >= 3 && \
-      op.operands[0].space == S0_ && op.operands[1].space == S1_ &&       \
-      op.operands[2].space == S2_) {                                      \
-    LAMBDA_(op, out);                                                     \
-    break;                                                                \
+ private:
+  template <typename Handler, typename OutputIt, size_t... Is>
+  static bool try_extract(const Operation &op, Handler &&handler,
+                          OutputIt &out, std::index_sequence<Is...>) {
+    auto ptrs =
+        std::make_tuple(std::get_if<OperandTypes>(&op.operands[Is])...);
+    if ((... && (std::get<Is>(ptrs) != nullptr))) {
+      handler(op, *std::get<Is>(ptrs)..., out);
+      return true;
+    }
+    return false;
+  }
+};
+
+template <ScalarDType dtype, VectorShape shape, typename... OperandTypes,
+          typename Handler, typename OutputIt>
+absl::Status match_op(const Operation &op, Handler &&handler,
+                      OutputIt &out) {
+  if (op.dtype != dtype || op.shape != shape) {
+    return absl::InvalidArgumentError("Op signature doesn't match");
   }
 
-#define GET_MATCH_MACRO(_1, _2, _3, _4, _5, _6, NAME, ...) NAME
-#define MATCH_OP(...) \
-  GET_MATCH_MACRO(__VA_ARGS__, MATCH_OP3, MATCH_OP2, MATCH_OP0)(__VA_ARGS__)
+  if (!extract_operands<OperandTypes...>::try_match(
+          op, std::forward<Handler>(handler), out)) {
+    return absl::InvalidArgumentError("Op signature doesn't match");
+  }
+
+  return absl::OkStatus();
+}
+
+#define MATCH_OP(DTYPE, SHAPE, ...) match_op<DTYPE, SHAPE, __VA_ARGS__>
